@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>cps_rl</name>
+  <version>0.0.0</version>
+  <description>RL environments for the CPS platform on Webots</description>
+
+  <maintainer email="cw.kang@kaist.ac.kr">Cheongwoong Kang</maintainer>
+
+  <license>Apache License 2.0</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+
+</package>

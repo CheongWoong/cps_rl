@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+
+<launch>
+  <arg name="robot_name" default="r1" />
+
+  <!-- ros_control -->
+  <group ns="$(arg robot_name)">
+    <rosparam>
+      rosbot_diff_drive_controller:
+        type: "diff_drive_controller/DiffDriveController"
+        left_wheel: ['fl_wheel_joint', 'rl_wheel_joint']
+        right_wheel: ['fr_wheel_joint', 'rr_wheel_joint']
+        pose_covariance_diagonal: [0.001, 0.001, 1000000.0, 1000000.0, 1000000.0, 1000.0]
+        twist_covariance_diagonal: [0.001, 0.001, 1000000.0, 1000000.0, 1000000.0, 1000.0]
+    </rosparam>
+    <param name="rosbot_diff_drive_controller/odom_frame_id" value="$(arg robot_name)/odom"/>
+    <param name="rosbot_diff_drive_controller/base_frame_id" value="$(arg robot_name)/base_link"/>
+    <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="rosbot_diff_drive_controller" />
+
+    <!-- Use joint state controller -->
+    <rosparam command="load" file="$(find joint_state_controller)/joint_state_controller.yaml" />
+    <node name="joint_state_controller_spawner" pkg="controller_manager" type="spawner" output="screen" args="joint_state_controller" />
+
+    <!-- robot_state_publisher -->
+    <node name="robot_state_publisher" pkg="robot_state_publisher" prefix_tf_with="$(arg robot_name)" respawn="true" respawn_delay="5" type="robot_state_publisher">
+      <param name="tf_prefix" value="$(arg robot_name)"/>
+      <param name="frame_id_prefix" value="$(arg robot_name)"/>
+    </node>
+  </group>
+
+  <!-- Coordinate system fix -->
+  <!-- <node pkg="tf" type="static_transform_publisher" name="lidar_tf" args="0 0 0 0 0 3.14 'r1/odom' r1/laser 100" /> -->
+</launch>
