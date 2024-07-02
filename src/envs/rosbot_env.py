@@ -77,6 +77,7 @@ class RosbotEnv(Supervisor, gym.Env):
         self.observation_space = gym.spaces.Box(low, high, dtype=np.float32)
         self.action_space = gym.spaces.Box(-np.ones(2), np.ones(2))
         self.spec = gym.envs.registration.EnvSpec(id='RosbotEnv-v0', max_episode_steps=max_episode_steps)
+        self.max_episode_steps = max_episode_steps
 
         # Open ROS plugins
         port = "11311"
