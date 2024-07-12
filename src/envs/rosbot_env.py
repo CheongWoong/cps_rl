@@ -120,16 +120,16 @@ class RosbotEnv(Supervisor, gym.Env):
         self.last_odom = od_data
 
     def torque_fl_callback(self, data):
-        self.torque_fl = data
+        self.torque_fl = data.data
 
     def torque_fr_callback(self, data):
-        self.torque_fr = data
+        self.torque_fr = data.data
 
     def torque_rl_callback(self, data):
-        self.torque_rl = data
+        self.torque_rl = data.data
 
     def torque_rr_callback(self, data):
-        self.torque_rr = data
+        self.torque_rr = data.data
 
     def step(self, action):
         target = False
