@@ -84,7 +84,7 @@ class RosbotEnv(Supervisor, gym.Env):
         # Open ROS plugins
         port = "11311"
         rospy.init_node("gym_webots", anonymous=True)
-        subprocess.Popen(["roslaunch", "-p", port, "cps_rl", "prepare_rosbot_plugin.launch", f"robot_name:={self.robot_name}"])
+        subprocess.Popen(["roslaunch", "-p", port, "battery_rl", "prepare_rosbot_plugin.launch", f"robot_name:={self.robot_name}"])
         print("ROSBOT r1 plugin ready!")
 
         # Set up the ROS publishers and subscribers
