@@ -149,6 +149,7 @@ class RosbotEnv(Supervisor, gym.Env):
         state = np.append(self.lidar_data, robot_state)
         reward = self.get_reward(target, collision, action, min_laser)
         self.prev_state = np.array(robot_state)
+        self.last_joint_states = self.joint_states
         return state, reward, done, {"target": target}
 
     def reset(self):
