@@ -23,9 +23,7 @@ import numpy as np
 import rospy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import LaserScan
-from webots_ros.msg import Float64Stamped
-from squaternion import Quaternion
+from sensor_msgs.msg import LaserScan, JointState
 from std_srvs.srv import Empty
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
@@ -84,16 +82,13 @@ class RosbotEnv(Supervisor, gym.Env):
         # Open ROS plugins
         port = "11311"
         rospy.init_node("gym_webots", anonymous=True)
-        subprocess.Popen(["roslaunch", "-p", port, "cps_rl", "prepare_rosbot_plugin.launch", f"robot_name:={self.robot_name}"])
+        subprocess.Popen(["roslaunch", "-p", port, "battery_rl", "prepare_rosbot_plugin.launch", f"robot_name:={self.robot_name}"])
         print("ROSBOT r1 plugin ready!")
 
         # Set up the ROS publishers and subscribers
         self.laser_scan = rospy.Subscriber(f"{self.robot_name}/laser/laser_scan", LaserScan, self.laser_scan_callback, queue_size=1)
         self.odom = rospy.Subscriber(f"{self.robot_name}/rosbot_diff_drive_controller/odom", Odometry, self.odom_callback, queue_size=1)
-        self.torque_fl = rospy.Subscriber(f"{self.robot_name}/fl_wheel_joint/torque_feedback", Float64Stamped, self.torque_fl_callback, queue_size=1)
-        self.torque_fr = rospy.Subscriber(f"{self.robot_name}/fr_wheel_joint/torque_feedback", Float64Stamped, self.torque_fr_callback, queue_size=1)
-        self.torque_rl = rospy.Subscriber(f"{self.robot_name}/rl_wheel_joint/torque_feedback", Float64Stamped, self.torque_rl_callback, queue_size=1)
-        self.torque_rr = rospy.Subscriber(f"{self.robot_name}/rr_wheel_joint/torque_feedback", Float64Stamped, self.torque_rr_callback, queue_size=1)
+        self.joint_states_sub = rospy.Subscriber(f"{self.robot_name}/joint_states", JointState, self.joint_states_callback, queue_size=1)
         self.vel_pub = rospy.Publisher(f"{self.robot_name}/rosbot_diff_drive_controller/cmd_vel", Twist, queue_size=1)
         self.publisher = rospy.Publisher("goal_point", MarkerArray, queue_size=3)
         self.publisher2 = rospy.Publisher("linear_velocity", MarkerArray, queue_size=1)
@@ -119,17 +114,8 @@ class RosbotEnv(Supervisor, gym.Env):
     def odom_callback(self, od_data):
         self.last_odom = od_data
 
-    def torque_fl_callback(self, data):
-        self.torque_fl = data.data
-
-    def torque_fr_callback(self, data):
-        self.torque_fr = data.data
-
-    def torque_rl_callback(self, data):
-        self.torque_rl = data.data
-
-    def torque_rr_callback(self, data):
-        self.torque_rr = data.data
+    def joint_states_callback(self, data):
+        self.joint_states = data.position
 
     def step(self, action):
         target = False
@@ -163,6 +149,7 @@ class RosbotEnv(Supervisor, gym.Env):
         state = np.append(self.lidar_data, robot_state)
         reward = self.get_reward(target, collision, action, min_laser)
         self.prev_state = np.array(robot_state)
+        self.last_joint_states = self.joint_states
         return state, reward, done, {"target": target}
 
     def reset(self):
@@ -196,6 +183,8 @@ class RosbotEnv(Supervisor, gym.Env):
         orientation.setSFRotation(new_rotation)
         
         super(Supervisor, self).step(self.__timestep*4)
+
+        self.last_joint_states = self.joint_states
 
         distance, theta = self.compute_distance_theta()
 
@@ -359,8 +348,11 @@ class RosbotEnv(Supervisor, gym.Env):
             return -100.0
         else:
             r3 = lambda x: 1 - x if x < 1 else 0.0
-            torques = np.sum(np.abs([self.torque_fl, self.torque_fr, self.torque_rl, self.torque_rr]))
-            MAX_TORQUE = 100
-            normalization_factor = 1 / (MAX_TORQUE*4)
-            energy_consumption = torques * normalization_factor
+
+            wheel_velocity = (np.array(self.joint_states) - np.array(self.last_joint_states)) / TIME_DELTA
+            wheel_velocity_sum = np.sum(np.abs(wheel_velocity))
+            MAX_VELOCITY = 26
+            normalization_factor = 1 / (MAX_VELOCITY*4)
+            energy_consumption = wheel_velocity_sum * normalization_factor
+
             return action[0] / 2 - abs(action[1]) / 2 - r3(min_laser) / 2 - self.energy_reward_coef*energy_consumption
