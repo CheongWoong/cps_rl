@@ -8,24 +8,23 @@ EXTERNPROTO "webots://projects/objects/factory/containers/protos/CardboardBox.pr
 EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Wall.proto"
 EXTERNPROTO "webots://projects/appearances/protos/Roughcast.proto"
 EXTERNPROTO "webots://projects/objects/hospital/protos/EmergencyExitSign.proto"
-EXTERNPROTO "webots://projects/robots/husarion/rosbot/protos/Rosbot.proto"
+EXTERNPROTO "webots://projects/robots/dji/mavic/protos/Mavic2Pro.proto"
 EXTERNPROTO "webots://projects/appearances/protos/CarpetFibers.proto"
 EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Window.proto"
 EXTERNPROTO "webots://projects/objects/animals/protos/Cat.proto"
 
 WorldInfo {
   info [
-    "ROSbot robot (Husarion)."
-    "The ROSbot avoids obstacles using its distance sensors."
+    "Mavic robot (DJI)."
   ]
-  title "ROSbot"
+  title "Mavic"
   basicTimeStep 40
   lineScale 0.15
 }
 Viewpoint {
   orientation -0.5773501794597086 0.5773504486494181 0.5773501794597086 2.09
   position 0.005928179494902685 0.005913167464613131 18.524920398769687
-  follow "Rosbot"
+  follow "Mavic"
 }
 TexturedBackground {
   texture "empty_office"
@@ -205,7 +204,7 @@ DEF Box4 CardboardBox {
   name "cardboard box(3)"
   size 1 1 1
 }
-DEF r1 Rosbot {
+DEF r1 Mavic {
   hidden translation_2 0.05 0.11 0.043
   hidden rotation_2 0 1 0 1.7356547041540766
   hidden translation_3 0.05 -0.11 0.043
@@ -229,7 +228,7 @@ DEF r1 Rosbot {
 }
 DEF SUPERVISOR Robot {
   translation 6 6 0
-  controller "rosbot_test_env"
+  controller "mavic_test_env"
   supervisor TRUE
 }
 DEF CAT Cat {
