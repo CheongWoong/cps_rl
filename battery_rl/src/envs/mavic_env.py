@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Reference: https://github.com/cyberbotics/webots
+
 import math
 import os
 import random
@@ -49,10 +51,14 @@ ACCELERATION_LIMIT *= TIME_DELTA
 
 
 K_VERTICAL_THRUST = 68.5    # with this thrust, the drone lifts.
-K_VERTICAL_OFFSET = 0.6
 K_VERTICAL_P = 3.0          # P constant of the vertical PID.
 K_ROLL_P = 50.0             # P constant of the roll PID.
 K_PITCH_P = 30.0            # P constant of the pitch PID.
+K_YAW_P = 2.0
+K_X_VELOCITY_P = 1
+K_Y_VELOCITY_P = 1
+K_X_VELOCITY_I = 0.01
+K_Y_VELOCITY_I = 0.01
 LIFT_HEIGHT = 1
 
 
@@ -154,7 +160,9 @@ class MavicEnv(Supervisor, gym.Env):
         return state, reward, done, {"target": target}
 
     def reset(self):
-        self.target_height = LIFT_HEIGHT
+        self.__vertical_ref = LIFT_HEIGHT
+        self.__linear_x_integral = 0
+        self.__linear_y_integral = 0
         
         # Reset the simulation
         for _ in range(25):
@@ -274,19 +282,38 @@ class MavicEnv(Supervisor, gym.Env):
 
     def apply_action(self, action):
         roll_ref = 0
-        pitch_ref = action[0]*2.0
-        self.target_height += action[2]*0.1
+        pitch_ref = 0
 
         # Read sensors
         roll, pitch, _ = self.__imu.getRollPitchYaw()
-        _, _, altitude = self.__gps.getValues()
-        roll_velocity, pitch_velocity, _ = self.__gyro.getValues()
+        _, _, vertical = self.__gps.getValues()
+        roll_velocity, pitch_velocity, twist_yaw = self.__gyro.getValues()
+        velocity = self.__gps.getSpeed()
+
+        if vertical > 0.2:
+            # Calculate velocity
+            velocity_x = (pitch / (abs(roll) + abs(pitch))) * velocity
+            velocity_y = - (roll / (abs(roll) + abs(pitch))) * velocity
+
+            # High level controller (linear velocity)
+            linear_y_error = 0
+            linear_x_error = action[0] - velocity_x
+            self.__linear_x_integral += linear_x_error
+            self.__linear_y_integral += linear_y_error
+            roll_ref = K_Y_VELOCITY_P * linear_y_error + K_Y_VELOCITY_I * self.__linear_y_integral
+            pitch_ref = - K_X_VELOCITY_P * linear_x_error - K_X_VELOCITY_I * self.__linear_x_integral
+            self.__vertical_ref = np.clip(
+                self.__vertical_ref + action[2] * (self.__timestep / 1000),
+                max(vertical - 0.5, LIFT_HEIGHT),
+                vertical + 0.5
+            )
+        vertical_input = K_VERTICAL_P * (self.__vertical_ref - vertical)
+
+        yaw_ref = action[1]
 
         roll_input = K_ROLL_P * np.clip(roll, -1, 1) + roll_velocity + roll_ref
         pitch_input = K_PITCH_P * np.clip(pitch, -1, 1) + pitch_velocity + pitch_ref
-        yaw_input = action[1]*1.3
-        clamped_difference_altitude = np.clip(self.target_height - altitude + K_VERTICAL_OFFSET, -1.0, 1.0)
-        vertical_input = K_VERTICAL_P * pow(clamped_difference_altitude, 3.0)
+        yaw_input = K_YAW_P * (yaw_ref - twist_yaw)
 
         m1 = K_VERTICAL_THRUST + vertical_input + yaw_input + pitch_input + roll_input
         m2 = K_VERTICAL_THRUST + vertical_input - yaw_input + pitch_input - roll_input
