@@ -243,7 +243,7 @@ buffer_size = 1e6  # Maximum size of the buffer
 file_name = "TD3_mavic"  # name of the file to store the policy
 save_model = True  # Weather to save the model or not
 load_model = False  # Weather to load a stored model
-random_near_obstacle = True  # To take random actions near obstacles or not
+random_near_obstacle = False  # To take random actions near obstacles or not
 
 # Create the network storage folders
 if not os.path.exists("./results"):
@@ -252,14 +252,14 @@ if save_model and not os.path.exists("./pytorch_models"):
     os.makedirs("./pytorch_models")
 
 # Create the training environment
-environment_dim = 20
-robot_dim = 4
+environment_dim = 0
+robot_dim = 6
 env = MavicEnv()
-time.sleep(5)
+time.sleep(1)
 torch.manual_seed(seed)
 np.random.seed(seed)
 state_dim = environment_dim + robot_dim
-action_dim = 2
+action_dim = 3
 max_action = 1
 
 # Create the network
@@ -350,7 +350,7 @@ while timestep < max_timesteps:
             action[0] = -1
 
     # Update action to fall in range [0,1] for linear velocity and [-1,1] for angular velocity
-    a_in = [(action[0] + 1) / 2, action[1]]
+    a_in = [(action[0] + 1) / 2, action[1], action[2]]
     next_state, reward, done, target = env.step(a_in)
     done_bool = 0 if episode_timesteps + 1 == max_ep else int(done)
     done = 1 if episode_timesteps + 1 == max_ep else int(done)

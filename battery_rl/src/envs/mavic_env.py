@@ -23,10 +23,9 @@ import numpy as np
 import rospy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import LaserScan
-from webots_ros.msg import Float64Stamped
-from squaternion import Quaternion
+from sensor_msgs.msg import LaserScan, JointState
 from std_srvs.srv import Empty
+from webots_ros.srv import set_float
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 
@@ -45,8 +44,16 @@ GOAL_REACHED_DIST = 0.3
 COLLISION_DIST = 0.35
 TIME_DELTA = 0.2
 
-ACCELERATION_LIMIT = np.array([1.0, 1.0]) # m/s, rad/s
+ACCELERATION_LIMIT = np.array([1.0, 1.0, 1.0]) # m/s, rad/s, m/s
 ACCELERATION_LIMIT *= TIME_DELTA
+
+
+K_VERTICAL_THRUST = 68.5    # with this thrust, the drone lifts.
+K_VERTICAL_OFFSET = 0.6
+K_VERTICAL_P = 3.0          # P constant of the vertical PID.
+K_ROLL_P = 50.0             # P constant of the roll PID.
+K_PITCH_P = 30.0            # P constant of the pitch PID.
+LIFT_HEIGHT = 1
 
 
 # Check if the random goal position is located on an obstacle and do not accept it if it is
@@ -66,7 +73,6 @@ class MavicEnv(Supervisor, gym.Env):
         # Environment info
         self.robot_name = 'r1'
         self.num_laser_points = 400
-        self.lidar_dim = 20
         self.invalid_action_clipping = False
         self.energy_reward_coef = 1
 
@@ -74,62 +80,39 @@ class MavicEnv(Supervisor, gym.Env):
         self.lower = -5.0
 
         # Open AI Gym generic
-        low = np.array([0 for _ in range(self.lidar_dim)] + [0, -np.pi, -1, -1], dtype=np.float32)
-        high = np.array([10 for _ in range(self.lidar_dim)] + [10, np.pi, 1, 1], dtype=np.float32)
+        low = np.array([0, -np.pi, -1, -1, -1, -1], dtype=np.float32)
+        high = np.array([10, np.pi, 1, 1, 1, 1], dtype=np.float32)
         self.observation_space = gym.spaces.Box(low, high, dtype=np.float32)
         self.action_space = gym.spaces.Box(-np.ones(2), np.ones(2))
-        self.spec = gym.envs.registration.EnvSpec(id='RosbotEnv-v0', max_episode_steps=max_episode_steps)
+        self.spec = gym.envs.registration.EnvSpec(id='MavicEnv-v0', max_episode_steps=max_episode_steps)
         self.max_episode_steps = max_episode_steps
 
         # Open ROS plugins
         port = "11311"
         rospy.init_node("gym_webots", anonymous=True)
-        subprocess.Popen(["roslaunch", "-p", port, "cps_rl", "prepare_rosbot_plugin.launch", f"robot_name:={self.robot_name}"])
-        print("ROSBOT r1 plugin ready!")
-
-        # Set up the ROS publishers and subscribers
-        self.laser_scan = rospy.Subscriber(f"{self.robot_name}/laser/laser_scan", LaserScan, self.laser_scan_callback, queue_size=1)
-        self.odom = rospy.Subscriber(f"{self.robot_name}/rosbot_diff_drive_controller/odom", Odometry, self.odom_callback, queue_size=1)
-        self.torque_fl = rospy.Subscriber(f"{self.robot_name}/fl_wheel_joint/torque_feedback", Float64Stamped, self.torque_fl_callback, queue_size=1)
-        self.torque_fr = rospy.Subscriber(f"{self.robot_name}/fr_wheel_joint/torque_feedback", Float64Stamped, self.torque_fr_callback, queue_size=1)
-        self.torque_rl = rospy.Subscriber(f"{self.robot_name}/rl_wheel_joint/torque_feedback", Float64Stamped, self.torque_rl_callback, queue_size=1)
-        self.torque_rr = rospy.Subscriber(f"{self.robot_name}/rr_wheel_joint/torque_feedback", Float64Stamped, self.torque_rr_callback, queue_size=1)
-        self.vel_pub = rospy.Publisher(f"{self.robot_name}/rosbot_diff_drive_controller/cmd_vel", Twist, queue_size=1)
-        self.publisher = rospy.Publisher("goal_point", MarkerArray, queue_size=3)
-        self.publisher2 = rospy.Publisher("linear_velocity", MarkerArray, queue_size=1)
-        self.publisher3 = rospy.Publisher("angular_velocity", MarkerArray, queue_size=1)
 
         # Environment specific
-        self.__timestep = int(TIME_DELTA*1000) # int(self.getBasicTimeStep())
+        # self.__timestep = int(TIME_DELTA*1000) # int(self.getBasicTimeStep())
+        self.__timestep = int(self.getBasicTimeStep())
         self.robot = self.getFromDef(f"{self.robot_name}")
+
+        # Sensors
+        self.__gps = self.getDevice('gps')
+        self.__gyro = self.getDevice('gyro')
+        self.__imu = self.getDevice('inertial unit')
+
+        # Initialize motors
+        self.motors = {
+            'front_left_propeller': self.getDevice('front left propeller'),
+            'front_right_propeller': self.getDevice('front right propeller'),
+            'rear_left_propeller': self.getDevice('rear left propeller'),
+            'rear_right_propeller': self.getDevice('rear right propeller')
+        }
 
         print("env init done!")
 
-    def laser_scan_callback(self, laser_data):
-        laser_left = np.array(laser_data.ranges[int(self.num_laser_points*0.75):self.num_laser_points])
-        laser_right = np.array(laser_data.ranges[0:int(self.num_laser_points*0.25)])
-        laser_state = np.append(laser_left, laser_right)
-        laser_state = np.clip(laser_state, 0, 10)
-        step_size = len(laser_state) // self.lidar_dim
-        laser_state = np.array(
-            [min(laser_state[i*step_size:(i+1)*step_size]) for i in range(self.lidar_dim)]
-        )
-        self.lidar_data = laser_state
-
     def odom_callback(self, od_data):
         self.last_odom = od_data
-
-    def torque_fl_callback(self, data):
-        self.torque_fl = data.data
-
-    def torque_fr_callback(self, data):
-        self.torque_fr = data.data
-
-    def torque_rl_callback(self, data):
-        self.torque_rl = data.data
-
-    def torque_rr_callback(self, data):
-        self.torque_rr = data.data
 
     def step(self, action):
         target = False
@@ -138,38 +121,51 @@ class MavicEnv(Supervisor, gym.Env):
         ###############################################################
         # invalid action masking (clipping) with acceleration limit and linear velocity near the goal
         if self.invalid_action_clipping:
-            prev_action = self.prev_state[-2:]
+            prev_action = self.prev_state[-3:]
             action_diff = action - prev_action
             action_diff = np.clip(action_diff, -ACCELERATION_LIMIT, ACCELERATION_LIMIT)
             action = prev_action + action_diff
         ###############################################################
-        self.apply_action(action)
-        self.publish_markers(action)
-
-        super(Supervisor, self).step(self.__timestep)
-
-        # read laser state
-        done, collision, min_laser = self.observe_collision(self.lidar_data)
+        for _ in range(25):
+            self.apply_action(action)
+            super(Supervisor, self).step(self.__timestep)
 
         # compute distance and angle to the goal
-        distance, theta = self.compute_distance_theta()
+        distance, theta, z_error = self.compute_distance_theta()
+        done, collision = self.observe_collision(z_error)
 
         # Detect if the goal has been reached and give a large positive reward
         if distance < GOAL_REACHED_DIST:
             target = True
             done = True
+        elif distance > self.upper*1.1:
+            collision = True
+            done = True
 
-        robot_state = [distance, theta, action[0], action[1]]
-        state = np.append(self.lidar_data, robot_state)
-        reward = self.get_reward(target, collision, action, min_laser)
+        motor_velocity = []
+        for motor in self.motors.values():
+            v = motor.getVelocity()
+            motor_velocity.append(v)
+
+        robot_state = [distance, theta, z_error, action[0], action[1], action[2]]
+        state = np.array(robot_state)
+        reward = self.get_reward(target, collision, action, z_error, motor_velocity)
         self.prev_state = np.array(robot_state)
         return state, reward, done, {"target": target}
 
     def reset(self):
+        self.target_height = LIFT_HEIGHT
+        
         # Reset the simulation
-        self.apply_action([0.0, 0.0])
-        self.simulationResetPhysics()
-        super(Supervisor, self).step(self.__timestep)
+        for _ in range(25):
+            self.simulationResetPhysics()
+            for motor in self.motors.values():
+                motor.setPosition(float('inf'))
+                motor.setVelocity(0)
+            self.__gps.enable(self.__timestep)
+            self.__gyro.enable(self.__timestep)
+            self.__imu.enable(self.__timestep)
+            super(Supervisor, self).step(self.__timestep)
 
         x, y = 0, 0
         position_ok = False
@@ -177,7 +173,7 @@ class MavicEnv(Supervisor, gym.Env):
             x = np.random.uniform(-4.5, 4.5)
             y = np.random.uniform(-4.5, 4.5)
             position_ok = check_pos(x, y)
-        new_position = [x, y, 0]
+        new_position = [x, y, 0.1]
         position = self.robot.getField('translation')
         position.setSFVec3f(new_position)
 
@@ -186,22 +182,32 @@ class MavicEnv(Supervisor, gym.Env):
 
         # set a random goal in empty space in environment
         self.change_goal()
-        # randomly scatter boxes in the environment
-        self.random_box()
-        self.publish_markers([0.0, 0.0])
 
         angle = np.random.uniform(-np.pi, np.pi)
         new_rotation = [0, 0, np.sign(angle), np.abs(angle)]
         orientation = self.robot.getField('rotation')
         orientation.setSFRotation(new_rotation)
-        
-        super(Supervisor, self).step(self.__timestep*4)
 
-        distance, theta = self.compute_distance_theta()
+        # Reset the simulation
+        for _ in range(25):
+            self.simulationResetPhysics()
+            for motor in self.motors.values():
+                motor.setPosition(float('inf'))
+                motor.setVelocity(0)
+            self.__gps.enable(self.__timestep)
+            self.__gyro.enable(self.__timestep)
+            self.__imu.enable(self.__timestep)
+            super(Supervisor, self).step(self.__timestep)
 
-        robot_state = [distance, theta, 0.0, 0.0]
+        for _ in range(500):
+            self.apply_action([0, 0, 0])
+            super(Supervisor, self).step(self.__timestep)
+
+        distance, theta, z_error = self.compute_distance_theta()
+
+        robot_state = [distance, theta, z_error, 0.0, 0.0, 0.0]
         self.prev_state = np.array(robot_state)
-        state = np.append(self.lidar_data, robot_state)
+        state = np.array(robot_state)
         return state
     
     def change_goal(self):
@@ -216,30 +222,8 @@ class MavicEnv(Supervisor, gym.Env):
         while not goal_ok:
             self.goal_x = self.odom_x + random.uniform(self.upper, self.lower)
             self.goal_y = self.odom_y + random.uniform(self.upper, self.lower)
+            self.goal_z = 1.0
             goal_ok = check_pos(self.goal_x, self.goal_y)
-
-    def random_box(self):
-        # Randomly change the location of the boxes in the environment on each reset to randomize the training
-        # environment
-        for i in range(1, 5):
-            x, y = 0, 0
-            box_ok = False
-            while not box_ok:
-                x = np.random.uniform(-6, 6)
-                y = np.random.uniform(-6, 6)
-                box_ok = check_pos(x, y)
-                distance_to_robot = np.linalg.norm([x - self.odom_x, y - self.odom_y])
-                distance_to_goal = np.linalg.norm([x - self.goal_x, y - self.goal_y])
-                if distance_to_robot < 1.5 or distance_to_goal < 1.5:
-                    box_ok = False
-            
-            box = self.getFromDef(f"Box{i}")
-            new_position = [x, y, 0]
-            position = box.getField('translation')
-            position.setSFVec3f(new_position)
-            new_rotation = [0, 0, 1, 0]
-            orientation = box.getField('rotation')
-            # orientation.setSFRotation(new_rotation)
 
         ##################
         ### Visualize goal on the simulator
@@ -249,75 +233,15 @@ class MavicEnv(Supervisor, gym.Env):
         position.setSFVec3f(new_position)
         ##################
 
-    def publish_markers(self, action):
-        # Publish visual data in Rviz
-        markerArray = MarkerArray()
-        marker = Marker()
-        marker.header.frame_id = "r1/odom"
-        marker.type = marker.CYLINDER
-        marker.action = marker.ADD
-        marker.scale.x = 0.1
-        marker.scale.y = 0.1
-        marker.scale.z = 0.01
-        marker.color.a = 1.0
-        marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
-        marker.pose.orientation.w = 1.0
-        marker.pose.position.x = self.goal_x
-        marker.pose.position.y = self.goal_y
-        marker.pose.position.z = 0
-
-        markerArray.markers.append(marker)
-        self.publisher.publish(markerArray)
-
-        markerArray2 = MarkerArray()
-        marker2 = Marker()
-        marker2.header.frame_id = "r1/odom"
-        marker2.type = marker.CUBE
-        marker2.action = marker.ADD
-        marker2.scale.x = abs(action[0])
-        marker2.scale.y = 0.1
-        marker2.scale.z = 0.01
-        marker2.color.a = 1.0
-        marker2.color.r = 1.0
-        marker2.color.g = 0.0
-        marker2.color.b = 0.0
-        marker2.pose.orientation.w = 1.0
-        marker2.pose.position.x = 5
-        marker2.pose.position.y = 0
-        marker2.pose.position.z = 0
-
-        markerArray2.markers.append(marker2)
-        self.publisher2.publish(markerArray2)
-
-        markerArray3 = MarkerArray()
-        marker3 = Marker()
-        marker3.header.frame_id = "r1/odom"
-        marker3.type = marker.CUBE
-        marker3.action = marker.ADD
-        marker3.scale.x = abs(action[1])
-        marker3.scale.y = 0.1
-        marker3.scale.z = 0.01
-        marker3.color.a = 1.0
-        marker3.color.r = 1.0
-        marker3.color.g = 0.0
-        marker3.color.b = 0.0
-        marker3.pose.orientation.w = 1.0
-        marker3.pose.position.x = 5
-        marker3.pose.position.y = 0.2
-        marker3.pose.position.z = 0
-
-        markerArray3.markers.append(marker3)
-        self.publisher3.publish(markerArray3)
-
     def compute_distance_theta(self):
         position = self.robot.getField('translation').getSFVec3f()
         self.odom_x = position[0]
         self.odom_y = position[1]
+        self.odom_z = position[2]
 
         x_r = self.goal_x - self.odom_x
         y_r = self.goal_y - self.odom_y
+        z_error = self.goal_z - self.odom_z
         if x_r == 0 and y_r == 0:
             return 0.0, 0.0
         
@@ -336,31 +260,59 @@ class MavicEnv(Supervisor, gym.Env):
         if theta < -np.pi:
             theta = theta + (2*np.pi)
 
-        return distance, theta
+        return distance, theta, z_error
     
+    def set_motor_velocity(self, motor_name, velocity):
+        rospy.wait_for_service(f'/r1/{motor_name}/set_velocity')
+        try:
+            set_velocity = rospy.ServiceProxy(f'/r1/{motor_name}/set_velocity', set_float)
+            response = set_velocity(velocity)
+            return response
+        except rospy.ServiceException as e:
+            rospy.logerr('Service call failed: %s' % e)
+            return None
+
     def apply_action(self, action):
-        vel_cmd = Twist()
-        vel_cmd.linear.x = action[0]
-        vel_cmd.angular.z = action[1]
-        self.vel_pub.publish(vel_cmd)
+        roll_ref = 0
+        pitch_ref = action[0]*2.0
+        self.target_height += action[2]*0.1
+
+        # Read sensors
+        roll, pitch, _ = self.__imu.getRollPitchYaw()
+        _, _, altitude = self.__gps.getValues()
+        roll_velocity, pitch_velocity, _ = self.__gyro.getValues()
+
+        roll_input = K_ROLL_P * np.clip(roll, -1, 1) + roll_velocity + roll_ref
+        pitch_input = K_PITCH_P * np.clip(pitch, -1, 1) + pitch_velocity + pitch_ref
+        yaw_input = action[1]*1.3
+        clamped_difference_altitude = np.clip(self.target_height - altitude + K_VERTICAL_OFFSET, -1.0, 1.0)
+        vertical_input = K_VERTICAL_P * pow(clamped_difference_altitude, 3.0)
+
+        m1 = K_VERTICAL_THRUST + vertical_input + yaw_input + pitch_input + roll_input
+        m2 = K_VERTICAL_THRUST + vertical_input - yaw_input + pitch_input - roll_input
+        m3 = K_VERTICAL_THRUST + vertical_input - yaw_input - pitch_input + roll_input
+        m4 = K_VERTICAL_THRUST + vertical_input + yaw_input - pitch_input - roll_input
+
+        self.motors['front_right_propeller'].setVelocity(-m1)
+        self.motors['front_left_propeller'].setVelocity(m2)
+        self.motors['rear_right_propeller'].setVelocity(m3)
+        self.motors['rear_left_propeller'].setVelocity(-m4)
 
     @staticmethod
-    def observe_collision(laser_data):
+    def observe_collision(z_error):
         # Detect a collision from laser data
-        min_laser = min(laser_data)
-        if min_laser < COLLISION_DIST:
-            return True, True, min_laser
-        return False, False, min_laser
+        if np.abs(z_error) > LIFT_HEIGHT / 2:
+            return True, True
+        return False, False
     
-    def get_reward(self, target, collision, action, min_laser):
+    def get_reward(self, target, collision, action, z_error, motor_velocity):
         if target:
             return 100.0
         elif collision:
             return -100.0
         else:
-            r3 = lambda x: 1 - x if x < 1 else 0.0
-            torques = np.sum(np.abs([self.torque_fl, self.torque_fr, self.torque_rl, self.torque_rr]))
-            MAX_TORQUE = 100
-            normalization_factor = 1 / (MAX_TORQUE*4)
-            energy_consumption = torques * normalization_factor
-            return action[0] / 2 - abs(action[1]) / 2 - r3(min_laser) / 2 - self.energy_reward_coef*energy_consumption
+            motor_velocity_sum = np.sum(np.abs(motor_velocity))
+            normalization_factor = 1 / (70*4)
+            energy_consumption = motor_velocity_sum * normalization_factor
+
+            return action[0] / 2 - abs(action[1]) / 2 - abs(z_error) / 2 - self.energy_reward_coef*energy_consumption
