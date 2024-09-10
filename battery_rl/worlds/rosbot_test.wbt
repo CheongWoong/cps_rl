@@ -116,18 +116,6 @@ Wall {
     }
   }
 }
-Door {
-  hidden translation_5 0.0030052964032692975 0.0006243865851593422 2.220446049250313e-15
-  hidden rotation_5 0 0 -1 0.004218897510293609
-  translation -4.93 4.3 0.01
-  position -0.004218897510297894
-  doorAppearance GlossyPaint {
-    baseColor 0.16 0.16 0.16
-  }
-  frameAppearance GlossyPaint {
-    baseColor 0.35 0.3503166247043564 0.35
-  }
-}
 EmergencyExitSign {
   translation -4.66 4.3 2.3
   rotation 0.5773489358550934 0.5773519358547601 0.5773499358549823 2.0944
