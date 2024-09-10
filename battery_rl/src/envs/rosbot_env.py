@@ -66,7 +66,7 @@ class RosbotEnv(Supervisor, gym.Env):
         self.num_laser_points = 400
         self.lidar_dim = 20
         self.invalid_action_clipping = False
-        self.energy_reward_coef = 1
+        self.energy_reward_coef = 0.0
 
         self.upper = 5.0
         self.lower = -5.0
@@ -355,4 +355,4 @@ class RosbotEnv(Supervisor, gym.Env):
             normalization_factor = 1 / (MAX_VELOCITY*4)
             energy_consumption = wheel_velocity_sum * normalization_factor
 
-            return action[0] / 2 - abs(action[1]) / 2 - r3(min_laser) / 2 - self.energy_reward_coef*energy_consumption
+            return action[0] / 2 - abs(action[1]) / 2 - r3(min_laser) / 2 - self.energy_reward_coef*energy_consumption - 0.75

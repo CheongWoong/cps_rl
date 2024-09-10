@@ -80,7 +80,7 @@ class MavicEnv(Supervisor, gym.Env):
         self.robot_name = 'r1'
         self.num_laser_points = 400
         self.invalid_action_clipping = False
-        self.energy_reward_coef = 1
+        self.energy_reward_coef = 0.0
 
         self.upper = 5.0
         self.lower = -5.0
@@ -342,4 +342,4 @@ class MavicEnv(Supervisor, gym.Env):
             normalization_factor = 1 / (70*4)
             energy_consumption = motor_velocity_sum * normalization_factor
 
-            return action[0] / 2 - abs(action[1]) / 2 - abs(z_error) / 2 - self.energy_reward_coef*energy_consumption
+            return action[0] / 2 - abs(action[1]) / 2 - abs(z_error) / 2 - self.energy_reward_coef*energy_consumption - 0.75
