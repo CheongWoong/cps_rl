@@ -7,15 +7,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../src'))
-from envs.rosbot_env import RosbotEnv
+from envs.mavic_env import MavicEnv
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # cuda or cpu
 
-environment_dim = 20
-robot_dim = 4
+environment_dim = 0
+robot_dim = 6
 state_dim = environment_dim + robot_dim
-action_dim = 2
+action_dim = 3
 
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):
@@ -62,27 +62,19 @@ def main():
         raise ValueError("Could not load the stored model parameters")
 
     # Initialize the environment
-    env = RosbotEnv()
+    env = MavicEnv()
 
-    goals = [(0,5), (0,-5), (-5,0), (5,0)] # forward, backward, left, right
+    goals = [(0,1), (0,-1), (-1,0), (1,0)] # forward, backward, left, right
 
     goal = goals.pop(0)
     obs = env.reset(goal)
     while True:
         obs_copy = obs.copy()
 
-        ### Debug: fill lidar data with 3
-        obs_copy[:-4] = 3
-
-        ### Debug: print observation
-        # print("obs:", obs_copy[-4:])
-        # print(obs_copy[:-4])
-        # print()
-
         action = network.get_action(obs_copy)
-        a_in = [(action[0] + 1) / 2, action[1]]
+        a_in = [(action[0] + 1) / 2, action[1], action[2]]
 
-        obs, reward, done, info = env.step(a_in)
+        obs, reward, done, info = env.step(a_in, is_training=False)
         episode_len += 1
         battery_penalty += info['battery_penalty']
         if done:

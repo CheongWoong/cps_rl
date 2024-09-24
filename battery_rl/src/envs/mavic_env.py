@@ -115,12 +115,14 @@ class MavicEnv(Supervisor, gym.Env):
             'rear_right_propeller': self.getDevice('rear right propeller')
         }
 
+        time.sleep(3)
+
         print("env init done!")
 
     def odom_callback(self, od_data):
         self.last_odom = od_data
 
-    def step(self, action):
+    def step(self, action, is_training=True):
         target = False
 
         # Apply the robot action
@@ -144,7 +146,7 @@ class MavicEnv(Supervisor, gym.Env):
         if distance < GOAL_REACHED_DIST:
             target = True
             done = True
-        elif distance > self.upper*1.1:
+        elif distance > self.upper*1.1 and is_training:
             collision = True
             done = True
 
@@ -155,11 +157,11 @@ class MavicEnv(Supervisor, gym.Env):
 
         robot_state = [distance, theta, z_error, action[0], action[1], action[2]]
         state = np.array(robot_state)
-        reward = self.get_reward(target, collision, action, z_error, motor_velocity)
+        reward, battery_penalty = self.get_reward(target, collision, action, z_error, motor_velocity)
         self.prev_state = np.array(robot_state)
-        return state, reward, done, {"target": target}
+        return state, reward, done, {"target": target, "battery_penalty": battery_penalty}
 
-    def reset(self):
+    def reset(self, goal=None):
         self.__vertical_ref = LIFT_HEIGHT
         self.__linear_x_integral = 0
         self.__linear_y_integral = 0
@@ -176,11 +178,12 @@ class MavicEnv(Supervisor, gym.Env):
             super(Supervisor, self).step(self.__timestep)
 
         x, y = 0, 0
-        position_ok = False
-        while not position_ok:
-            x = np.random.uniform(-4.5, 4.5)
-            y = np.random.uniform(-4.5, 4.5)
-            position_ok = check_pos(x, y)
+        if goal is None:
+            position_ok = False
+            while not position_ok:
+                x = np.random.uniform(-4.5, 4.5)
+                y = np.random.uniform(-4.5, 4.5)
+                position_ok = check_pos(x, y)
         new_position = [x, y, 0.1]
         position = self.robot.getField('translation')
         position.setSFVec3f(new_position)
@@ -189,9 +192,9 @@ class MavicEnv(Supervisor, gym.Env):
         self.odom_y = y
 
         # set a random goal in empty space in environment
-        self.change_goal()
+        self.change_goal(goal)
 
-        angle = np.random.uniform(-np.pi, np.pi)
+        angle = np.random.uniform(-np.pi, np.pi) if goal is None else np.pi/2
         new_rotation = [0, 0, np.sign(angle), np.abs(angle)]
         orientation = self.robot.getField('rotation')
         orientation.setSFRotation(new_rotation)
@@ -218,20 +221,23 @@ class MavicEnv(Supervisor, gym.Env):
         state = np.array(robot_state)
         return state
     
-    def change_goal(self):
+    def change_goal(self, goal=None):
         # Place a new goal and check if its location is not on one of the obstacles
         if self.upper < 10:
             self.upper += 0.004
         if self.lower > -10:
             self.lower -= 0.004
 
-        goal_ok = False
-
-        while not goal_ok:
-            self.goal_x = self.odom_x + random.uniform(self.upper, self.lower)
-            self.goal_y = self.odom_y + random.uniform(self.upper, self.lower)
+        if goal is None:
+            goal_ok = False
+            while not goal_ok:
+                self.goal_x = self.odom_x + random.uniform(self.upper, self.lower)
+                self.goal_y = self.odom_y + random.uniform(self.upper, self.lower)
+                self.goal_z = 1.0
+                goal_ok = check_pos(self.goal_x, self.goal_y)
+        else:
+            self.goal_x, self.goal_y = goal
             self.goal_z = 1.0
-            goal_ok = check_pos(self.goal_x, self.goal_y)
 
         ##################
         ### Visualize goal on the simulator
@@ -334,12 +340,14 @@ class MavicEnv(Supervisor, gym.Env):
     
     def get_reward(self, target, collision, action, z_error, motor_velocity):
         if target:
-            return 100.0
+            task_reward = 100.0
         elif collision:
-            return -100.0
+            task_reward = -100.0
         else:
-            motor_velocity_sum = np.sum(np.abs(motor_velocity))
-            normalization_factor = 1 / (70*4)
-            energy_consumption = motor_velocity_sum * normalization_factor
+            task_reward = action[0] / 2 - abs(action[1]) / 2 - abs(z_error) / 2 - 0.75
 
-            return action[0] / 2 - abs(action[1]) / 2 - abs(z_error) / 2 - self.energy_reward_coef*energy_consumption - 0.75
+        motor_velocity_sum = np.sum(np.abs(motor_velocity))
+        normalization_factor = 1 / (70*4)
+        energy_consumption = motor_velocity_sum * normalization_factor
+
+        return task_reward - self.energy_reward_coef*energy_consumption, energy_consumption
