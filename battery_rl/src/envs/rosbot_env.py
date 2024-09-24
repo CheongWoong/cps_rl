@@ -98,6 +98,8 @@ class RosbotEnv(Supervisor, gym.Env):
         self.__timestep = int(TIME_DELTA*1000) # int(self.getBasicTimeStep())
         self.robot = self.getFromDef(f"{self.robot_name}")
 
+        time.sleep(3)
+
         print("env init done!")
 
     def laser_scan_callback(self, laser_data):
@@ -147,23 +149,24 @@ class RosbotEnv(Supervisor, gym.Env):
 
         robot_state = [distance, theta, action[0], action[1]]
         state = np.append(self.lidar_data, robot_state)
-        reward = self.get_reward(target, collision, action, min_laser)
+        reward, battery_penalty = self.get_reward(target, collision, action, min_laser)
         self.prev_state = np.array(robot_state)
         self.last_joint_states = self.joint_states
-        return state, reward, done, {"target": target}
+        return state, reward, done, {"target": target, "battery_penalty": battery_penalty}
 
-    def reset(self):
+    def reset(self, goal=None):
         # Reset the simulation
         self.apply_action([0.0, 0.0])
         self.simulationResetPhysics()
         super(Supervisor, self).step(self.__timestep)
 
         x, y = 0, 0
-        position_ok = False
-        while not position_ok:
-            x = np.random.uniform(-4.5, 4.5)
-            y = np.random.uniform(-4.5, 4.5)
-            position_ok = check_pos(x, y)
+        if goal is None:
+            position_ok = False
+            while not position_ok:
+                x = np.random.uniform(-4.5, 4.5)
+                y = np.random.uniform(-4.5, 4.5)
+                position_ok = check_pos(x, y)
         new_position = [x, y, 0]
         position = self.robot.getField('translation')
         position.setSFVec3f(new_position)
@@ -172,12 +175,12 @@ class RosbotEnv(Supervisor, gym.Env):
         self.odom_y = y
 
         # set a random goal in empty space in environment
-        self.change_goal()
+        self.change_goal(goal)
         # randomly scatter boxes in the environment
         self.random_box()
         self.publish_markers([0.0, 0.0])
 
-        angle = np.random.uniform(-np.pi, np.pi)
+        angle = np.random.uniform(-np.pi, np.pi) if goal is None else np.pi/2
         new_rotation = [0, 0, np.sign(angle), np.abs(angle)]
         orientation = self.robot.getField('rotation')
         orientation.setSFRotation(new_rotation)
@@ -193,42 +196,47 @@ class RosbotEnv(Supervisor, gym.Env):
         state = np.append(self.lidar_data, robot_state)
         return state
     
-    def change_goal(self):
+    def change_goal(self, goal=None):
         # Place a new goal and check if its location is not on one of the obstacles
         if self.upper < 10:
             self.upper += 0.004
         if self.lower > -10:
             self.lower -= 0.004
 
-        goal_ok = False
-
-        while not goal_ok:
-            self.goal_x = self.odom_x + random.uniform(self.upper, self.lower)
-            self.goal_y = self.odom_y + random.uniform(self.upper, self.lower)
-            goal_ok = check_pos(self.goal_x, self.goal_y)
+        if goal is None:
+            goal_ok = False
+            while not goal_ok:
+                self.goal_x = self.odom_x + random.uniform(self.upper, self.lower)
+                self.goal_y = self.odom_y + random.uniform(self.upper, self.lower)
+                goal_ok = check_pos(self.goal_x, self.goal_y)
+        else:
+            self.goal_x, self.goal_y = goal
 
     def random_box(self):
         # Randomly change the location of the boxes in the environment on each reset to randomize the training
         # environment
-        for i in range(1, 5):
-            x, y = 0, 0
-            box_ok = False
-            while not box_ok:
-                x = np.random.uniform(-6, 6)
-                y = np.random.uniform(-6, 6)
-                box_ok = check_pos(x, y)
-                distance_to_robot = np.linalg.norm([x - self.odom_x, y - self.odom_y])
-                distance_to_goal = np.linalg.norm([x - self.goal_x, y - self.goal_y])
-                if distance_to_robot < 1.5 or distance_to_goal < 1.5:
-                    box_ok = False
-            
-            box = self.getFromDef(f"Box{i}")
-            new_position = [x, y, 0]
-            position = box.getField('translation')
-            position.setSFVec3f(new_position)
-            new_rotation = [0, 0, 1, 0]
-            orientation = box.getField('rotation')
-            # orientation.setSFRotation(new_rotation)
+        try:
+            for i in range(1, 5):
+                x, y = 0, 0
+                box_ok = False
+                while not box_ok:
+                    x = np.random.uniform(-6, 6)
+                    y = np.random.uniform(-6, 6)
+                    box_ok = check_pos(x, y)
+                    distance_to_robot = np.linalg.norm([x - self.odom_x, y - self.odom_y])
+                    distance_to_goal = np.linalg.norm([x - self.goal_x, y - self.goal_y])
+                    if distance_to_robot < 1.5 or distance_to_goal < 1.5:
+                        box_ok = False
+                
+                box = self.getFromDef(f"Box{i}")
+                new_position = [x, y, 0]
+                position = box.getField('translation')
+                position.setSFVec3f(new_position)
+                new_rotation = [0, 0, 1, 0]
+                orientation = box.getField('rotation')
+                # orientation.setSFRotation(new_rotation)
+        except:
+            pass
 
         ##################
         ### Visualize goal on the simulator
@@ -343,16 +351,17 @@ class RosbotEnv(Supervisor, gym.Env):
     
     def get_reward(self, target, collision, action, min_laser):
         if target:
-            return 100.0
+            task_reward = 100.0
         elif collision:
-            return -100.0
+            task_reward = -100.0
         else:
             r3 = lambda x: 1 - x if x < 1 else 0.0
+            task_reward = action[0] / 2 - abs(action[1]) / 2 - r3(min_laser) / 2 - 0.75
 
-            wheel_velocity = (np.array(self.joint_states) - np.array(self.last_joint_states)) / TIME_DELTA
-            wheel_velocity_sum = np.sum(np.abs(wheel_velocity))
-            MAX_VELOCITY = 26
-            normalization_factor = 1 / (MAX_VELOCITY*4)
-            energy_consumption = wheel_velocity_sum * normalization_factor
+        wheel_velocity = (np.array(self.joint_states) - np.array(self.last_joint_states)) / TIME_DELTA
+        wheel_velocity_sum = np.sum(np.abs(wheel_velocity))
+        MAX_VELOCITY = 26
+        normalization_factor = 1 / (MAX_VELOCITY*4)
+        energy_consumption = wheel_velocity_sum * normalization_factor
 
-            return action[0] / 2 - abs(action[1]) / 2 - r3(min_laser) / 2 - self.energy_reward_coef*energy_consumption - 0.75
+        return task_reward - self.energy_reward_coef*energy_consumption, -energy_consumption

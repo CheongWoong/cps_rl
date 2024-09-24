@@ -1,0 +1,76 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "webots://projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "webots://projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Door.proto"
+EXTERNPROTO "webots://projects/appearances/protos/GlossyPaint.proto"
+EXTERNPROTO "webots://projects/objects/factory/containers/protos/CardboardBox.proto"
+EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Wall.proto"
+EXTERNPROTO "webots://projects/appearances/protos/Roughcast.proto"
+EXTERNPROTO "webots://projects/objects/hospital/protos/EmergencyExitSign.proto"
+EXTERNPROTO "webots://projects/robots/husarion/rosbot/protos/Rosbot.proto"
+EXTERNPROTO "webots://projects/appearances/protos/CarpetFibers.proto"
+EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Window.proto"
+EXTERNPROTO "webots://projects/objects/animals/protos/Cat.proto"
+
+WorldInfo {
+  info [
+    "ROSbot robot (Husarion)."
+    "The ROSbot avoids obstacles using its distance sensors."
+  ]
+  title "ROSbot"
+  basicTimeStep 40
+  lineScale 0.15
+}
+Viewpoint {
+  orientation -0.5773501794597086 0.5773504486494181 0.5773501794597086 2.09
+  position 0.005928179494902685 0.005913167464613131 18.524920398769687
+  follow "Rosbot"
+}
+TexturedBackground {
+  texture "empty_office"
+  luminosity 1.6
+  skybox FALSE
+  skyColor [
+    0.5 0.5 0.5
+  ]
+}
+Floor {
+  tileSize 1 1
+  size 20 20
+  appearance CarpetFibers {
+    colorOverride 0.6 0.6 0.6
+  }
+}
+DEF r1 Rosbot {
+  hidden translation_2 0.05 0.11 0.043
+  hidden rotation_2 0 1 0 1.7356547041540766
+  hidden translation_3 0.05 -0.11 0.043
+  hidden rotation_3 0 1 0 4.22297155394428
+  hidden translation_4 -0.055 0.11 0.043
+  hidden rotation_4 0 0.9999999999999999 0 1.733005210234002
+  hidden translation_5 -0.055 -0.11 0.043
+  hidden rotation_5 0 1 0 4.220324161148387
+  translation 1.4551795800787047e-10 2.6276832641204673e-09 -0.0007032315455447052
+  rotation 1.987156537413573e-05 1.9001464488675597e-05 -0.9999999996220327 1.6172097503311826
+  name "r1"
+  controller "ros"
+  controllerArgs [
+    "--use-sim-time"
+    "--clock"
+    "--robot-description"
+    "--auto-publish"
+    "--use-ros-control"
+    "--name=r1"
+  ]
+}
+DEF SUPERVISOR Robot {
+  translation 6 6 0
+  controller "rosbot_test_env"
+  supervisor TRUE
+  controllerArgs "vanilla"
+}
+DEF CAT Cat {
+  translation 2 0 0
+  scale 0.5
+}
