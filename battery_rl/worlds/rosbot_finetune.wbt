@@ -1,0 +1,226 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "webots://projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "webots://projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Door.proto"
+EXTERNPROTO "webots://projects/appearances/protos/GlossyPaint.proto"
+EXTERNPROTO "webots://projects/objects/factory/containers/protos/CardboardBox.proto"
+EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Wall.proto"
+EXTERNPROTO "webots://projects/appearances/protos/Roughcast.proto"
+EXTERNPROTO "webots://projects/objects/hospital/protos/EmergencyExitSign.proto"
+EXTERNPROTO "webots://projects/robots/husarion/rosbot/protos/Rosbot.proto"
+EXTERNPROTO "webots://projects/appearances/protos/CarpetFibers.proto"
+EXTERNPROTO "webots://projects/objects/apartment_structure/protos/Window.proto"
+EXTERNPROTO "webots://projects/objects/animals/protos/Cat.proto"
+
+WorldInfo {
+  info [
+    "ROSbot robot (Husarion)."
+    "The ROSbot avoids obstacles using its distance sensors."
+  ]
+  title "ROSbot"
+  basicTimeStep 40
+  lineScale 0.15
+}
+Viewpoint {
+  orientation -0.5773501794597086 0.5773504486494181 0.5773501794597086 2.09
+  position 0.005928179494902685 0.005913167464613131 18.524920398769687
+  follow "Rosbot"
+}
+TexturedBackground {
+  texture "empty_office"
+  luminosity 1.6
+  skybox FALSE
+  skyColor [
+    0.5 0.5 0.5
+  ]
+}
+Floor {
+  tileSize 1 1
+  appearance CarpetFibers {
+    colorOverride 0.6 0.6 0.6
+  }
+}
+Wall {
+  translation 0 5.1 0
+  name "wall(1)"
+  size 10 0.2 3
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 5 1.75
+    }
+  }
+}
+Wall {
+  translation 0 -5.1 0
+  name "wall(2)"
+  size 10 0.2 3
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 5 1.75
+    }
+  }
+}
+Wall {
+  translation 4.9 4.785 0
+  rotation 0 0 1 1.5708
+  name "wall(3)"
+  size 0.41 0.2 3
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 4.125 1.725
+    }
+  }
+}
+Wall {
+  translation 4.9 1.665 0
+  rotation 0 0 1 1.5708
+  name "wall(4)"
+  size 2.23 0.2 3
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 4.125 1.725
+    }
+  }
+}
+Wall {
+  translation 4.9 -1.518 0
+  rotation 0 0 1 1.5708
+  name "wall(5)"
+  size 2.34 0.2 3
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 4.125 1.725
+    }
+  }
+}
+Wall {
+  translation 4.9 -4.748 0
+  rotation 0 0 1 1.5708
+  name "wall(6)"
+  size 0.52 0.2 3
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 4.125 1.725
+    }
+  }
+}
+Wall {
+  translation -4.89 0.002 0
+  rotation 0 0 1 1.5708
+  name "wall(7)"
+  size 10 0.2 3
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 4.125 1.725
+    }
+  }
+}
+EmergencyExitSign {
+  translation -4.66 4.3 2.3
+  rotation 0.5773489358550934 0.5773519358547601 0.5773499358549823 2.0944
+  name "emergency exit sign(1)"
+}
+Window {
+  translation 4.9 -4.04 0
+  size 0.2 0.9 3
+  bottomWallHeight 0
+  windowHeight 2.1
+  frameAppearance GlossyPaint {
+    baseColor 0.2 0.2 0.2
+  }
+}
+Window {
+  translation 4.9 -3.14 0
+  name "window(1)"
+  size 0.2 0.9 3
+  bottomWallHeight 0
+  windowHeight 2.1
+  frameAppearance GlossyPaint {
+    baseColor 0.2 0.2 0.2
+  }
+}
+Window {
+  translation 4.9 0.1 0
+  name "window(2)"
+  size 0.2 0.9 3
+  bottomWallHeight 0
+  windowHeight 2.1
+  frameAppearance GlossyPaint {
+    baseColor 0.2 0.2 0.2
+  }
+}
+Window {
+  translation 4.9 4.13 0
+  name "window(3)"
+  size 0.2 0.9 3
+  bottomWallHeight 0
+  windowHeight 2.1
+  frameAppearance GlossyPaint {
+    baseColor 0.2 0.2 0.2
+  }
+}
+Window {
+  translation 4.9 3.23 0
+  name "window(4)"
+  size 0.2 0.9 3
+  bottomWallHeight 0
+  windowHeight 2.1
+  frameAppearance GlossyPaint {
+    baseColor 0.2 0.2 0.2
+  }
+}
+DEF Box1 CardboardBox {
+  translation -4.47816 -4.67263 0.31
+  rotation 0 0 -1 1.5708
+  size 1 1 1
+}
+DEF Box2 CardboardBox {
+  translation -3.84275 -4.64061 0.31
+  rotation 0 0 -1 1.5708
+  name "cardboard box(1)"
+  size 1 1 1
+}
+DEF Box3 CardboardBox {
+  translation -4.44685 -4.00471 0.31
+  rotation 0 0 -1 1.5
+  name "cardboard box(2)"
+  size 1 1 1
+}
+DEF Box4 CardboardBox {
+  translation -4.3088 -4.47372 0.91
+  rotation 0 0 1 -1.8325953071795862
+  name "cardboard box(3)"
+  size 1 1 1
+}
+DEF r1 Rosbot {
+  hidden translation_2 0.05 0.11 0.043
+  hidden rotation_2 0 1 0 1.7356547041540766
+  hidden translation_3 0.05 -0.11 0.043
+  hidden rotation_3 0 1 0 4.22297155394428
+  hidden translation_4 -0.055 0.11 0.043
+  hidden rotation_4 0 0.9999999999999999 0 1.733005210234002
+  hidden translation_5 -0.055 -0.11 0.043
+  hidden rotation_5 0 1 0 4.220324161148387
+  translation 1.4551795800787047e-10 2.6276832641204673e-09 -0.0007032315455447052
+  rotation 1.987156537413573e-05 1.9001464488675597e-05 -0.9999999996220327 1.6172097503311826
+  name "r1"
+  controller "ros"
+  controllerArgs [
+    "--use-sim-time"
+    "--clock"
+    "--robot-description"
+    "--auto-publish"
+    "--use-ros-control"
+    "--name=r1"
+  ]
+}
+DEF SUPERVISOR Robot {
+  translation 6 6 0
+  controller "rosbot_finetune_env"
+  supervisor TRUE
+}
+DEF CAT Cat {
+  translation 2 0 0
+  scale 0.5
+}

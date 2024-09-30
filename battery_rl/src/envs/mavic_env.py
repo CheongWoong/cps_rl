@@ -140,7 +140,10 @@ class MavicEnv(Supervisor, gym.Env):
 
         # compute distance and angle to the goal
         distance, theta, z_error = self.compute_distance_theta()
-        done, collision = self.observe_collision(z_error)
+        if is_training:
+            done, collision = self.observe_collision(z_error)
+        else:
+            done, collision = False, False
 
         # Detect if the goal has been reached and give a large positive reward
         if distance < GOAL_REACHED_DIST:
